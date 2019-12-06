@@ -1,7 +1,14 @@
-apiVersion: samples.knative.dev/v1alpha1
-kind: AddressableService
+apiVersion: serving.knative.dev/v1
+kind: Service
 metadata:
-  name: make-it-addressable
-  namespace: knative-samples
+  name: foo
+  annotations:
+    networking.knative.dev/ingress.class: contour.ingress.networking.knative.dev
 spec:
-  serviceName: webhook
+  template:
+    spec:
+      containers:
+      - image: gcr.io/knative-samples/knative-route-demo:blue
+        env:
+        - name: T_VERSION
+          value: "blue"
