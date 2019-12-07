@@ -18,12 +18,18 @@ package contour
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
+	contourclientset "github.com/mattmoor/net-contour/pkg/client/clientset/versioned"
+	contourlisters "github.com/mattmoor/net-contour/pkg/client/listers/projectcontour/v1"
+	"github.com/mattmoor/net-contour/pkg/reconciler/contour/resources"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"knative.dev/pkg/controller"
@@ -36,10 +42,12 @@ import (
 // Reconciler implements controller.Reconciler for Ingress resources.
 type Reconciler struct {
 	// Client is used to write back status updates.
-	Client clientset.Interface
+	Client        clientset.Interface
+	ContourClient contourclientset.Interface
 
 	// Listers index properties about resources
-	Lister listers.IngressLister
+	Lister        listers.IngressLister
+	ContourLister contourlisters.HTTPProxyLister
 
 	// Recorder is an event recorder for recording Event resources to the
 	// Kubernetes API.
@@ -104,12 +112,65 @@ func (r *Reconciler) reconcile(ctx context.Context, ing *v1alpha1.Ingress) error
 	}
 	ing.Status.InitializeConditions()
 
-	logging.FromContext(ctx).Infof("RECONCILING %+v", ing)
-	// if err := r.reconcileService(ctx, ing); err != nil {
-	// 	return err
-	// }
+	if err := r.reconcileProxies(ctx, ing); err != nil {
+		return err
+	}
 
 	ing.Status.ObservedGeneration = ing.Generation
+	return nil
+}
+
+func (r *Reconciler) reconcileProxies(ctx context.Context, ing *v1alpha1.Ingress) error {
+	pl, err := resources.MakeHTTPProxies(ctx, ing)
+	if err != nil {
+		return err
+	}
+
+	for _, proxy := range pl {
+		selector := labels.Set(map[string]string{
+			"ingress.parent": ing.Name,
+			"ingress.fqdn":   proxy.Spec.VirtualHost.Fqdn,
+		}).AsSelector()
+		elts, err := r.ContourLister.HTTPProxies(ing.Namespace).List(selector)
+		if err != nil {
+			return err
+		}
+		if len(elts) == 0 {
+			_, err := r.ContourClient.ProjectcontourV1().HTTPProxies(proxy.Namespace).Create(proxy)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		update := elts[0].DeepCopy()
+		update.Annotations = proxy.Annotations
+		update.Labels = proxy.Labels
+		update.Spec = proxy.Spec
+		_, err = r.ContourClient.ProjectcontourV1().HTTPProxies(proxy.Namespace).Update(update)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = r.ContourClient.ProjectcontourV1().HTTPProxies(ing.Namespace).DeleteCollection(
+		&metav1.DeleteOptions{},
+		metav1.ListOptions{
+			LabelSelector: fmt.Sprintf(
+				"ingress.parent=%s,ingress.generation!=%d", ing.Name, ing.Generation),
+		})
+	if err != nil {
+		return err
+	}
+
+	// TODO(mattmoor): Do this for real.
+	ing.Status.MarkNetworkConfigured()
+	ing.Status.MarkLoadBalancerReady(
+		[]v1alpha1.LoadBalancerIngressStatus{},
+		[]v1alpha1.LoadBalancerIngressStatus{},
+		[]v1alpha1.LoadBalancerIngressStatus{{
+			DomainInternal: "envoy-internal.projectcontour.svc.cluster.local",
+		}})
+
 	return nil
 }
 

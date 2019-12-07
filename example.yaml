@@ -2,13 +2,21 @@ apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
   name: foo
+  # labels:
+  #   serving.knative.dev/visibility: cluster-local
   annotations:
     networking.knative.dev/ingress.class: contour.ingress.networking.knative.dev
 spec:
   template:
+    metadata:
+      name: foo-v1
     spec:
       containers:
       - image: gcr.io/knative-samples/knative-route-demo:blue
         env:
         - name: T_VERSION
           value: "blue"
+  traffic:
+  - revisionName: foo-v1
+    tag: blue
+    percent: 100

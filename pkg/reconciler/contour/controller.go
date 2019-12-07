@@ -19,6 +19,8 @@ package contour
 import (
 	"context"
 
+	contourclient "github.com/mattmoor/net-contour/pkg/client/injection/client"
+	proxyinformer "github.com/mattmoor/net-contour/pkg/client/injection/informers/projectcontour/v1/httpproxy"
 	servingclient "knative.dev/serving/pkg/client/injection/client"
 	ingressinformer "knative.dev/serving/pkg/client/injection/informers/networking/v1alpha1/ingress"
 
@@ -49,10 +51,13 @@ func NewController(
 	logger := logging.FromContext(ctx)
 
 	ingressInformer := ingressinformer.Get(ctx)
+	proxyInformer := proxyinformer.Get(ctx)
 
 	c := &Reconciler{
-		Client: servingclient.Get(ctx),
-		Lister: ingressInformer.Lister(),
+		Client:        servingclient.Get(ctx),
+		ContourClient: contourclient.Get(ctx),
+		Lister:        ingressInformer.Lister(),
+		ContourLister: proxyInformer.Lister(),
 		Recorder: record.NewBroadcaster().NewRecorder(
 			scheme.Scheme, corev1.EventSource{Component: controllerAgentName}),
 	}
@@ -67,7 +72,7 @@ func NewController(
 	}
 	ingressInformer.Informer().AddEventHandler(ingressHandler)
 
-	// TODO(mattmoor): Child resources.
+	proxyInformer.Informer().AddEventHandler(controller.HandleAll(impl.EnqueueControllerOf))
 
 	return impl
 }
