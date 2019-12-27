@@ -123,32 +123,43 @@ func (v *routeVisitor) visit(vertex dag.Vertex) {
 			switch vh := vertex.(type) {
 			case *dag.VirtualHost:
 				var routes []*envoy_api_v2_route.Route
+
 				vh.Visit(func(v dag.Vertex) {
 					route, ok := v.(*dag.Route)
 					if !ok {
 						return
 					}
 
-					match := envoy.RouteMatch(route)
 					if route.HTTPSUpgrade {
 						// TODO(dfc) if we ensure the builder never returns a dag.Route connected
 						// to a SecureVirtualHost that requires upgrade, this logic can move to
 						// envoy.RouteRoute.
 						routes = append(routes, &envoy_api_v2_route.Route{
-							Match:  match,
+							Match:  envoy.RouteMatch(route),
 							Action: envoy.UpgradeHTTPS(),
 						})
-						return
+					} else {
+						rt := &envoy_api_v2_route.Route{
+							Match:  envoy.RouteMatch(route),
+							Action: envoy.RouteRoute(route),
+						}
+						if route.RequestHeadersPolicy != nil {
+							rt.RequestHeadersToAdd = envoy.HeaderValueList(route.RequestHeadersPolicy.Set, false)
+							rt.RequestHeadersToRemove = route.RequestHeadersPolicy.Remove
+						}
+						if route.ResponseHeadersPolicy != nil {
+							rt.ResponseHeadersToAdd = envoy.HeaderValueList(route.ResponseHeadersPolicy.Set, false)
+							rt.ResponseHeadersToRemove = route.ResponseHeadersPolicy.Remove
+						}
+						routes = append(routes, rt)
 					}
-					routes = append(routes, &envoy_api_v2_route.Route{
-						Match:  match,
-						Action: envoy.RouteRoute(route),
-					})
 				})
+
 				if len(routes) < 1 {
 					return
 				}
-				SortRoutes(routes)
+
+				sortRoutes(routes)
 				vhost := envoy.VirtualHost(vh.Name, routes...)
 				v.routes["ingress_http"].VirtualHosts = append(v.routes["ingress_http"].VirtualHosts, vhost)
 			case *dag.SecureVirtualHost:
@@ -159,15 +170,24 @@ func (v *routeVisitor) visit(vertex dag.Vertex) {
 						return
 					}
 
-					routes = append(routes, &envoy_api_v2_route.Route{
+					rt := &envoy_api_v2_route.Route{
 						Match:  envoy.RouteMatch(route),
 						Action: envoy.RouteRoute(route),
-					})
+					}
+					if route.RequestHeadersPolicy != nil {
+						rt.RequestHeadersToAdd = envoy.HeaderValueList(route.RequestHeadersPolicy.Set, false)
+						rt.RequestHeadersToRemove = route.RequestHeadersPolicy.Remove
+					}
+					if route.ResponseHeadersPolicy != nil {
+						rt.ResponseHeadersToAdd = envoy.HeaderValueList(route.ResponseHeadersPolicy.Set, false)
+						rt.ResponseHeadersToRemove = route.ResponseHeadersPolicy.Remove
+					}
+					routes = append(routes, rt)
 				})
 				if len(routes) < 1 {
 					return
 				}
-				SortRoutes(routes)
+				sortRoutes(routes)
 				vhost := envoy.VirtualHost(vh.VirtualHost.Name, routes...)
 				v.routes["ingress_https"].VirtualHosts = append(v.routes["ingress_https"].VirtualHosts, vhost)
 			default:
@@ -208,11 +228,11 @@ func (v virtualHostsByName) Len() int           { return len(v) }
 func (v virtualHostsByName) Swap(i, j int)      { v[i], v[j] = v[j], v[i] }
 func (v virtualHostsByName) Less(i, j int) bool { return v[i].Name < v[j].Name }
 
-// SortRoutes sorts the given Route slice in place. Routes are ordered
+// sortRoutes sorts the given Route slice in place. Routes are ordered
 // first by longest prefix (or regex), then by the length of the
 // HeaderMatch slice (if any). The HeaderMatch slice is also ordered
 // by the matching header name.
-func SortRoutes(routes []*envoy_api_v2_route.Route) {
+func sortRoutes(routes []*envoy_api_v2_route.Route) {
 	for _, r := range routes {
 		sort.Stable(headerMatcherByName(r.Match.Headers))
 	}
@@ -255,27 +275,23 @@ func (l longestRouteFirst) Less(i, j int) bool {
 				return true
 			case -1:
 				return false
-			case 0:
+			default:
 				return longestRouteByHeaders(l[i], l[j])
 			}
-
-			panic("bad compare")
 		}
-	case *envoy_api_v2_route.RouteMatch_Regex:
+	case *envoy_api_v2_route.RouteMatch_SafeRegex:
 		switch b := l[j].Match.PathSpecifier.(type) {
-		case *envoy_api_v2_route.RouteMatch_Regex:
-			cmp := strings.Compare(a.Regex, b.Regex)
+		case *envoy_api_v2_route.RouteMatch_SafeRegex:
+			cmp := strings.Compare(a.SafeRegex.Regex, b.SafeRegex.Regex)
 			switch cmp {
 			case 1:
 				// Sort longest regex first.
 				return true
 			case -1:
 				return false
-			case 0:
+			default:
 				return longestRouteByHeaders(l[i], l[j])
 			}
-
-			panic("bad compare")
 		case *envoy_api_v2_route.RouteMatch_Prefix:
 			return true
 		}

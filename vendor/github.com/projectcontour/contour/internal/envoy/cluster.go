@@ -78,17 +78,24 @@ func Cluster(c *dag.Cluster) *v2.Cluster {
 		}
 	}
 
-	switch c.Upstream.Protocol {
+	switch c.Protocol {
 	case "tls":
-		cluster.TlsContext = UpstreamTLSContext(
-			upstreamValidationCACert(c),
-			upstreamValidationSubjectAltName(c),
+		cluster.TransportSocket = UpstreamTLSTransportSocket(
+			UpstreamTLSContext(
+				upstreamValidationCACert(c),
+				upstreamValidationSubjectAltName(c),
+				service.ExternalName,
+			),
 		)
 	case "h2":
-		cluster.TlsContext = UpstreamTLSContext(
-			upstreamValidationCACert(c),
-			upstreamValidationSubjectAltName(c),
-			"h2")
+		cluster.TransportSocket = UpstreamTLSTransportSocket(
+			UpstreamTLSContext(
+				upstreamValidationCACert(c),
+				upstreamValidationSubjectAltName(c),
+				service.ExternalName,
+				"h2",
+			),
+		)
 		fallthrough
 	case "h2c":
 		cluster.Http2ProtocolOptions = &envoy_api_v2_core.Http2ProtocolOptions{}

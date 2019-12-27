@@ -113,6 +113,24 @@ type Route struct {
 
 	// Mirror Policy defines the mirroring policy for this Route.
 	MirrorPolicy *MirrorPolicy
+
+	// RequestHeadersPolicy defines how headers are managed during forwarding
+	RequestHeadersPolicy *HeadersPolicy
+
+	// ResponseHeadersPolicy defines how headers are managed during forwarding
+	ResponseHeadersPolicy *HeadersPolicy
+}
+
+// HasPathPrefix returns whether this route has a PrefixPathCondition.
+func (r *Route) HasPathPrefix() bool {
+	_, ok := r.PathCondition.(*PrefixCondition)
+	return ok
+}
+
+// HasPathRegex returns whether this route has a RegexPathCondition.
+func (r *Route) HasPathRegex() bool {
+	_, ok := r.PathCondition.(*RegexCondition)
+	return ok
 }
 
 // TimeoutPolicy defines the timeout policy for a route.
@@ -142,9 +160,25 @@ type RetryPolicy struct {
 	PerTryTimeout time.Duration
 }
 
-// MirrorPolicy desinges the mirroring policy for a route.
+// MirrorPolicy defines the mirroring policy for a route.
 type MirrorPolicy struct {
 	Cluster *Cluster
+}
+
+// HeadersPolicy defines how headers are managed during forwarding
+type HeadersPolicy struct {
+	// HostRewrite defines if a host should be rewritten on upstream requests
+	HostRewrite string
+
+	Set    map[string]string
+	Remove []string
+}
+
+type HeaderValue struct {
+	// Name represents a key of a header
+	Key string
+	// Value represents the value of a header specified by a key
+	Value string
 }
 
 // UpstreamValidation defines how to validate the certificate on the upstream service
@@ -332,6 +366,9 @@ type Cluster struct {
 	// The relative weight of this Cluster compared to its siblings.
 	Weight uint32
 
+	// The protocol to use to speak to this cluster.
+	Protocol string
+
 	// UpstreamValidation defines how to verify the backend service's certificate
 	UpstreamValidation *UpstreamValidation
 
@@ -341,6 +378,12 @@ type Cluster struct {
 
 	// Cluster health check policy.
 	*HealthCheckPolicy
+
+	// RequestHeadersPolicy defines how headers are managed during forwarding
+	RequestHeadersPolicy *HeadersPolicy
+
+	// ResponseHeadersPolicy defines how headers are managed during forwarding
+	ResponseHeadersPolicy *HeadersPolicy
 }
 
 func (c Cluster) Visit(f func(Vertex)) {

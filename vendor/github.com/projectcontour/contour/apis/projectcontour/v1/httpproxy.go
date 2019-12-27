@@ -147,6 +147,24 @@ type Route struct {
 	// The load balancing policy for this route.
 	// +optional
 	LoadBalancerPolicy *LoadBalancerPolicy `json:"loadBalancerPolicy,omitempty"`
+	// The policy for rewriting the path of the request URL
+	// after the request has been routed to a Service.
+	//
+	// +optional
+	PathRewritePolicy *PathRewritePolicy `json:"pathRewritePolicy,omitempty"`
+	// The policy for managing request headers during proxying
+	// +optional
+	RequestHeadersPolicy *HeadersPolicy `json:"requestHeadersPolicy,omitempty"`
+	// The policy for managing response headers during proxying
+	// +optional
+	ResponseHeadersPolicy *HeadersPolicy `json:"responseHeadersPolicy,omitempty"`
+}
+
+func (r *Route) GetPrefixReplacements() []ReplacePrefix {
+	if r.PathRewritePolicy != nil {
+		return r.PathRewritePolicy.ReplacePrefix
+	}
+	return nil
 }
 
 // TCPProxy contains the set of services to proxy TCP connections.
@@ -178,6 +196,10 @@ type Service struct {
 	Name string `json:"name"`
 	// Port (defined as Integer) to proxy traffic to since a service can have multiple defined.
 	Port int `json:"port"`
+	// Protocol may be used to specify (or override) the protocol used to reach this Service.
+	// Values may be tls, h2, h2c.  It ommitted protocol-selection falls back on Service annotations.
+	// +optional
+	Protocol *string `json:"protocol,omitempty"`
 	// Weight defines percentage of traffic to balance traffic
 	// +optional
 	Weight uint32 `json:"weight,omitempty"`
@@ -186,6 +208,12 @@ type Service struct {
 	UpstreamValidation *UpstreamValidation `json:"validation,omitempty"`
 	// If Mirror is true the Service will receive a read only mirror of the traffic for this route.
 	Mirror bool `json:"mirror,omitempty"`
+	// The policy for managing request headers during proxying
+	// +optional
+	RequestHeadersPolicy *HeadersPolicy `json:"requestHeadersPolicy,omitempty"`
+	// The policy for managing response headers during proxying
+	// +optional
+	ResponseHeadersPolicy *HeadersPolicy `json:"responseHeadersPolicy,omitempty"`
 }
 
 // HTTPHealthCheckPolicy defines health checks on the upstream service.
@@ -212,13 +240,19 @@ type HTTPHealthCheckPolicy struct {
 
 // TimeoutPolicy defines the attributes associated with timeout.
 type TimeoutPolicy struct {
+	// TimeoutPolicy durations are expressed as per the format specified in the ParseDuration documentation: https://godoc.org/time#ParseDuration
+	// Example input values: "300ms", "5s", "1m". Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+	// The string 'infinity' is also a valid input and specifies no timeout.
+
 	// Timeout for receiving a response from the server after processing a request from client.
 	// If not supplied the timeout duration is undefined.
-	Response string `json:"response"`
+	// +optional
+	Response string `json:"response,omitempty"`
 
-	// Timeout after which if there are no active requests, the connection between Envoy and the
-	// backend will be closed.
-	Idle string `json:"idle"`
+	// Timeout after which if there are no active requests for this route, the connection between
+	// Envoy and the backend will be closed. If not specified, there is no per-route idle timeout.
+	// +optional
+	Idle string `json:"idle,omitempty"`
 }
 
 // RetryPolicy defines the attributes associated with retrying policy.
@@ -232,9 +266,69 @@ type RetryPolicy struct {
 	PerTryTimeout string `json:"perTryTimeout,omitempty"`
 }
 
+// ReplacePrefix describes a path prefix replacement.
+type ReplacePrefix struct {
+	// Prefix specifies the URL path prefix to be replaced.
+	//
+	// If Prefix is specified, it must exactly match the Condition
+	// prefix that is rendered by the chain of including HTTPProxies
+	// and only that path prefix will be replaced by Replacement.
+	// This allows HTTPProxies that are included through multiple
+	// roots to only replace specific path prefixes, leaving others
+	// unmodified.
+	//
+	// If Prefix is not specified, all routing prefixes rendered
+	// by the include chain will be replaced.
+	//
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Prefix string `json:"prefix,omitempty"`
+
+	// Replacement is the string that the routing path prefix
+	// will be replaced with. This must not be empty.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Replacement string `json:"replacement"`
+}
+
+// PathRewritePolicy specifies how a request URL path should be
+// rewritten. This rewriting takes place after a request is routed
+// and has no subsequent effects on the proxy's routing decision.
+// No HTTP headers or body content is rewritten.
+//
+// Exactly one field in this struct may be specified.
+type PathRewritePolicy struct {
+	// ReplacePrefix describes how the path prefix should be replaced.
+	// +optional
+	ReplacePrefix []ReplacePrefix `json:"replacePrefix,omitempty"`
+}
+
 // LoadBalancerPolicy defines the load balancing policy.
 type LoadBalancerPolicy struct {
 	Strategy string `json:"strategy,omitempty"`
+}
+
+// HeadersPolicy defines how headers are managed during forwarding
+type HeadersPolicy struct {
+	// Set specifies a list of HTTP header values that will be set in the HTTP header
+	// +optional
+	Set []HeaderValue `json:"set,omitempty"`
+	// Remove specifies a list of HTTP header names to remove
+	// +optional
+	Remove []string `json:"remove,omitempty"`
+}
+
+// HeaderValue represents a header name/value pair
+type HeaderValue struct {
+	// Name represents a key of a header
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// Value represents the value of a header specified by a key
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Value string `json:"value"`
 }
 
 // UpstreamValidation defines how to verify the backend service's certificate
@@ -247,8 +341,10 @@ type UpstreamValidation struct {
 
 // Status reports the current state of the HTTPProxy.
 type Status struct {
-	CurrentStatus string `json:"currentStatus"`
-	Description   string `json:"description"`
+	// +optional
+	CurrentStatus string `json:"currentStatus,omitempty"`
+	// +optional
+	Description string `json:"description,omitempty"`
 }
 
 // +genclient
@@ -260,14 +356,14 @@ type Status struct {
 // +kubebuilder:printcolumn:name="TLS Secret",type="string",JSONPath=".spec.virtualhost.tls.secretName",description="Secret with TLS credentials"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.currentStatus",description="The current status of the HTTPProxy"
 // +kubebuilder:printcolumn:name="Status Description",type="string",JSONPath=".status.description",description="Description of the current status"
-// +kubebuilder:resource:path=httpproxies,shortName=proxy;proxies,singular=httpproxy
+// +kubebuilder:resource:scope=Namespaced,path=httpproxies,shortName=proxy;proxies,singular=httpproxy
 type HTTPProxy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
 	Spec HTTPProxySpec `json:"spec"`
 	// +optional
-	Status `json:"status"`
+	Status Status `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

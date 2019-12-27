@@ -23,6 +23,7 @@ import (
 
 	contourclientset "github.com/mattmoor/net-contour/pkg/client/clientset/versioned"
 	contourlisters "github.com/mattmoor/net-contour/pkg/client/listers/projectcontour/v1"
+	"github.com/mattmoor/net-contour/pkg/reconciler/contour/config"
 	"github.com/mattmoor/net-contour/pkg/reconciler/contour/resources"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -30,13 +31,19 @@ import (
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"knative.dev/pkg/controller"
 	"knative.dev/pkg/logging"
+	"knative.dev/pkg/network"
+	"knative.dev/pkg/tracker"
+	"knative.dev/serving/pkg/apis/networking"
 	"knative.dev/serving/pkg/apis/networking/v1alpha1"
 	clientset "knative.dev/serving/pkg/client/clientset/versioned"
 	listers "knative.dev/serving/pkg/client/listers/networking/v1alpha1"
+	"knative.dev/serving/pkg/network/status"
+	"knative.dev/serving/pkg/reconciler"
 )
 
 // Reconciler implements controller.Reconciler for Ingress resources.
@@ -46,12 +53,18 @@ type Reconciler struct {
 	ContourClient contourclientset.Interface
 
 	// Listers index properties about resources
-	Lister        listers.IngressLister
-	ContourLister contourlisters.HTTPProxyLister
+	Lister          listers.IngressLister
+	ContourLister   contourlisters.HTTPProxyLister
+	ServiceLister   corev1listers.ServiceLister
+	EndpointsLister corev1listers.EndpointsLister
 
 	// Recorder is an event recorder for recording Event resources to the
 	// Kubernetes API.
 	Recorder record.EventRecorder
+
+	statusManager status.Manager
+	configStore   reconciler.ConfigStore
+	tracker       tracker.Interface
 }
 
 // Check that our Reconciler implements controller.Reconciler
@@ -60,6 +73,7 @@ var _ controller.Reconciler = (*Reconciler)(nil)
 // Reconcile implements controller.Reconciler
 func (r *Reconciler) Reconcile(ctx context.Context, key string) error {
 	logger := logging.FromContext(ctx)
+	ctx = r.configStore.ToContext(ctx)
 
 	// Convert the namespace/name string into a distinct namespace and name
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
@@ -80,6 +94,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, key string) error {
 		return nil
 	} else if err != nil {
 		return err
+	} else if original.Annotations != nil {
+		class := original.Annotations[networking.IngressClassAnnotationKey]
+		if class != ContourIngressClassName {
+			logger.Debugf("resource %q is not our class", key)
+			return nil
+		}
 	}
 	// Don't modify the informers copy.
 	resource := original.DeepCopy()
@@ -121,15 +141,56 @@ func (r *Reconciler) reconcile(ctx context.Context, ing *v1alpha1.Ingress) error
 }
 
 func (r *Reconciler) reconcileProxies(ctx context.Context, ing *v1alpha1.Ingress) error {
-	pl, err := resources.MakeHTTPProxies(ctx, ing)
-	if err != nil {
-		return err
+	serviceNames := resources.ServiceNames(ctx, ing)
+	serviceToProtocol := make(map[string]string, len(serviceNames))
+
+	// Establish the protocol for each Service, and ensure that their Endpoints are
+	// populated with Ready addresses before we reprogram Contour.
+	for _, name := range serviceNames.List() {
+		if err := r.tracker.TrackReference(tracker.Reference{
+			APIVersion: "v1",
+			Kind:       "Service",
+			Namespace:  ing.Namespace,
+			Name:       name,
+		}, ing); err != nil {
+			return err
+		}
+		svc, err := r.ServiceLister.Services(ing.Namespace).Get(name)
+		if err != nil {
+			return err
+		}
+		for _, port := range svc.Spec.Ports {
+			switch port.Name {
+			case networking.ServicePortNameH2C:
+				serviceToProtocol[name] = "h2c"
+			}
+		}
+
+		if err := r.tracker.TrackReference(tracker.Reference{
+			APIVersion: "v1",
+			Kind:       "Endpoints",
+			Namespace:  ing.Namespace,
+			Name:       name,
+		}, ing); err != nil {
+			return err
+		}
+		ep, err := r.EndpointsLister.Endpoints(ing.Namespace).Get(name)
+		if err != nil {
+			return err
+		}
+		for _, subset := range ep.Subsets {
+			if len(subset.Addresses) == 0 {
+				ing.Status.MarkIngressNotReady("EndpointsNotReady",
+					fmt.Sprintf("Waiting for Endpoints %q to have ready addresses.", name))
+				return nil
+			}
+		}
 	}
 
-	for _, proxy := range pl {
+	for _, proxy := range resources.MakeHTTPProxies(ctx, ing, serviceToProtocol) {
 		selector := labels.Set(map[string]string{
-			"ingress.parent": ing.Name,
-			"ingress.fqdn":   proxy.Spec.VirtualHost.Fqdn,
+			"ingress.parent": proxy.Labels["ingress.parent"],
+			"ingress.fqdn":   proxy.Labels["ingress.fqdn"],
 		}).AsSelector()
 		elts, err := r.ContourLister.HTTPProxies(ing.Namespace).List(selector)
 		if err != nil {
@@ -146,13 +207,17 @@ func (r *Reconciler) reconcileProxies(ctx context.Context, ing *v1alpha1.Ingress
 		update.Annotations = proxy.Annotations
 		update.Labels = proxy.Labels
 		update.Spec = proxy.Spec
+		if equality.Semantic.DeepEqual(elts[0], update) {
+			// Avoid updates that don't change anything.
+			continue
+		}
 		_, err = r.ContourClient.ProjectcontourV1().HTTPProxies(proxy.Namespace).Update(update)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = r.ContourClient.ProjectcontourV1().HTTPProxies(ing.Namespace).DeleteCollection(
+	err := r.ContourClient.ProjectcontourV1().HTTPProxies(ing.Namespace).DeleteCollection(
 		&metav1.DeleteOptions{},
 		metav1.ListOptions{
 			LabelSelector: fmt.Sprintf(
@@ -161,17 +226,33 @@ func (r *Reconciler) reconcileProxies(ctx context.Context, ing *v1alpha1.Ingress
 	if err != nil {
 		return err
 	}
-
-	// TODO(mattmoor): Do this for real.
 	ing.Status.MarkNetworkConfigured()
-	ing.Status.MarkLoadBalancerReady(
-		[]v1alpha1.LoadBalancerIngressStatus{},
-		[]v1alpha1.LoadBalancerIngressStatus{},
-		[]v1alpha1.LoadBalancerIngressStatus{{
-			DomainInternal: "envoy-internal.projectcontour.svc.cluster.local",
-		}})
 
+	ready, err := r.statusManager.IsReady(ctx, ing)
+	if err != nil {
+		return fmt.Errorf("failed to probe Ingress %s/%s: %w", ing.GetNamespace(), ing.GetName(), err)
+	}
+	if ready {
+		ing.Status.MarkLoadBalancerReady(
+			[]v1alpha1.LoadBalancerIngressStatus{},
+			lbStatus(ctx, v1alpha1.IngressVisibilityExternalIP),
+			lbStatus(ctx, v1alpha1.IngressVisibilityClusterLocal))
+	} else {
+		ing.Status.MarkLoadBalancerNotReady()
+	}
 	return nil
+}
+
+func lbStatus(ctx context.Context, vis v1alpha1.IngressVisibility) (lbs []v1alpha1.LoadBalancerIngressStatus) {
+	if keys, ok := config.FromContext(ctx).Contour.VisibilityKeys[vis]; ok {
+		for _, key := range keys.List() {
+			namespace, name, _ := cache.SplitMetaNamespaceKey(key)
+			lbs = append(lbs, v1alpha1.LoadBalancerIngressStatus{
+				DomainInternal: network.GetServiceHostname(name, namespace),
+			})
+		}
+	}
+	return
 }
 
 // Update the Status of the resource.  Caller is responsible for checking

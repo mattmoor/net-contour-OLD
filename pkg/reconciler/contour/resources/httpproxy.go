@@ -18,50 +18,137 @@ package resources
 
 import (
 	"context"
-	"errors"
+	"crypto/sha1"
 	"fmt"
+	"sort"
+	"strings"
 
+	"github.com/mattmoor/net-contour/pkg/reconciler/contour/config"
 	v1 "github.com/projectcontour/contour/apis/projectcontour/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"knative.dev/pkg/kmeta"
+	"knative.dev/pkg/network"
 	"knative.dev/serving/pkg/apis/networking/v1alpha1"
+	servingnetwork "knative.dev/serving/pkg/network"
+	"knative.dev/serving/pkg/network/ingress"
 )
 
-func MakeHTTPProxies(ctx context.Context, ing *v1alpha1.Ingress) ([]*v1.HTTPProxy, error) {
+func ServiceNames(ctx context.Context, ing *v1alpha1.Ingress) sets.String {
+	s := sets.NewString()
+	for _, rule := range ing.Spec.Rules {
+		for _, path := range rule.HTTP.Paths {
+			for _, split := range path.Splits {
+				s.Insert(split.ServiceName)
+			}
+		}
+	}
+	return s
+}
+
+func MakeHTTPProxies(ctx context.Context, ing *v1alpha1.Ingress, serviceToProtocol map[string]string) []*v1.HTTPProxy {
+	ing = ing.DeepCopy()
+	ingress.InsertProbe(ing)
+
+	hostToTLS := make(map[string]*v1alpha1.IngressTLS, len(ing.Spec.TLS))
+	for _, tls := range ing.Spec.TLS {
+		for _, host := range tls.Hosts {
+			hostToTLS[host] = &tls
+		}
+	}
+
+	var allowInsecure bool
+	switch config.FromContext(ctx).Network.HTTPProtocol {
+	case servingnetwork.HTTPDisabled, servingnetwork.HTTPRedirected:
+		allowInsecure = false
+	case servingnetwork.HTTPEnabled:
+		allowInsecure = true
+	}
+
 	proxies := []*v1.HTTPProxy{}
 	for _, rule := range ing.Spec.Rules {
-		class := "contour"
-		if rule.Visibility == v1alpha1.IngressVisibilityClusterLocal {
-			class = "contour-internal"
-		}
+		class := config.FromContext(ctx).Contour.VisibilityClasses[rule.Visibility]
 
-		if len(rule.HTTP.Paths) != 1 {
-			return nil, errors.New("multiple paths is not supported")
-		}
-		path := rule.HTTP.Paths[0]
-
-		var top *v1.TimeoutPolicy
-		if path.Timeout != nil {
-			top = &v1.TimeoutPolicy{
-				Response: path.Timeout.Duration.String(),
+		routes := make([]v1.Route, 0, len(rule.HTTP.Paths))
+		for _, path := range rule.HTTP.Paths {
+			var top *v1.TimeoutPolicy
+			if path.Timeout != nil {
+				top = &v1.TimeoutPolicy{
+					Response: path.Timeout.Duration.String(),
+				}
 			}
-		}
 
-		var retry *v1.RetryPolicy
-		if path.Retries != nil {
-			retry = &v1.RetryPolicy{
-				NumRetries:    uint32(path.Retries.Attempts),
-				PerTryTimeout: path.Retries.PerTryTimeout.Duration.String(),
+			var retry *v1.RetryPolicy
+			if path.Retries != nil && path.Retries.Attempts > 0 {
+				retry = &v1.RetryPolicy{
+					NumRetries:    uint32(path.Retries.Attempts),
+					PerTryTimeout: path.Retries.PerTryTimeout.Duration.String(),
+				}
 			}
-		}
 
-		svcs := make([]v1.Service, 0, len(path.Splits))
-		for _, split := range path.Splits {
-			svcs = append(svcs, v1.Service{
-				Name:   split.ServiceName,
-				Port:   split.ServicePort.IntValue(),
-				Weight: uint32(split.Percent),
-				// TODO(mattmoor): AppendHeaders
+			preSplitHeaders := &v1.HeadersPolicy{
+				Set: make([]v1.HeaderValue, 0, len(path.AppendHeaders)),
+			}
+			for key, value := range path.AppendHeaders {
+				preSplitHeaders.Set = append(preSplitHeaders.Set, v1.HeaderValue{
+					Name:  key,
+					Value: value,
+				})
+			}
+			// This should never be empty due to the InsertProbe
+			sort.Slice(preSplitHeaders.Set, func(i, j int) bool {
+				return preSplitHeaders.Set[i].Name < preSplitHeaders.Set[j].Name
+			})
+
+			svcs := make([]v1.Service, 0, len(path.Splits))
+			for _, split := range path.Splits {
+				postSplitHeaders := &v1.HeadersPolicy{
+					Set: make([]v1.HeaderValue, 0, len(split.AppendHeaders)),
+				}
+				for key, value := range split.AppendHeaders {
+					postSplitHeaders.Set = append(postSplitHeaders.Set, v1.HeaderValue{
+						Name:  key,
+						Value: value,
+					})
+				}
+				if len(postSplitHeaders.Set) > 0 {
+					sort.Slice(postSplitHeaders.Set, func(i, j int) bool {
+						return postSplitHeaders.Set[i].Name < postSplitHeaders.Set[j].Name
+					})
+				} else {
+					postSplitHeaders = nil
+				}
+				var protocol *string
+				if proto, ok := serviceToProtocol[split.ServiceName]; ok {
+					protocol = &proto
+				}
+				svcs = append(svcs, v1.Service{
+					Name:                 split.ServiceName,
+					Port:                 split.ServicePort.IntValue(),
+					Weight:               uint32(split.Percent),
+					RequestHeadersPolicy: postSplitHeaders,
+					Protocol:             protocol,
+				})
+			}
+
+			var conditions []v1.Condition
+			if path.Path != "" {
+				conditions = append(conditions, v1.Condition{
+					// This is technically not accurate since it's not a prefix,
+					// but a regular expression, however, all usage is either empty
+					// or absolute paths.
+					Prefix: path.Path,
+				})
+			}
+
+			routes = append(routes, v1.Route{
+				Conditions:           conditions,
+				TimeoutPolicy:        top,
+				RetryPolicy:          retry,
+				Services:             svcs,
+				EnableWebsockets:     true,
+				RequestHeadersPolicy: preSplitHeaders,
+				PermitInsecure:       allowInsecure,
 			})
 		}
 
@@ -79,25 +166,36 @@ func MakeHTTPProxies(ctx context.Context, ing *v1alpha1.Ingress) ([]*v1.HTTPProx
 			},
 			Spec: v1.HTTPProxySpec{
 				// VirtualHost: filled in below
-				Routes: []v1.Route{{
-					TimeoutPolicy: top,
-					RetryPolicy:   retry,
-					Services:      svcs,
-				}},
+				Routes: routes,
 			},
 		}
 
-		for _, host := range rule.Hosts {
-			hostProxy := base.DeepCopy()
-			hostProxy.Name = kmeta.ChildName(ing.Name, host)
-			hostProxy.Spec.VirtualHost = &v1.VirtualHost{
-				Fqdn: host,
-			}
-			hostProxy.Labels["ingress.fqdn"] = host
+		for _, originalHost := range rule.Hosts {
+			for _, host := range ingress.ExpandedHosts(sets.NewString(originalHost)).List() {
+				hostProxy := base.DeepCopy()
+				hostProxy.Name = kmeta.ChildName(ing.Name+"-", host)
+				hostProxy.Spec.VirtualHost = &v1.VirtualHost{
+					Fqdn: host,
+				}
+				hostProxy.Labels["ingress.fqdn"] = fmt.Sprintf("%x", sha1.Sum([]byte(host)))
 
-			proxies = append(proxies, hostProxy)
+				if tls, ok := hostToTLS[host]; ok {
+					// TODO(mattmoor): How do we deal with custom secret schemas?
+					hostProxy.Spec.VirtualHost.TLS = &v1.TLS{
+						SecretName: fmt.Sprintf("%s/%s", tls.SecretNamespace, tls.SecretName),
+					}
+				}
+
+				// Ideally these would just be marked ClusterLocal :(
+				if strings.HasSuffix(originalHost, network.GetClusterDomainName()) {
+					privateClass := config.FromContext(ctx).Contour.VisibilityClasses[v1alpha1.IngressVisibilityClusterLocal]
+					hostProxy.Annotations["kubernetes.io/ingress.class"] = privateClass
+				}
+
+				proxies = append(proxies, hostProxy)
+			}
 		}
 	}
 
-	return proxies, nil
+	return proxies
 }

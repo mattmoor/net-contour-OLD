@@ -46,21 +46,21 @@ func main() {
 
 	cli := app.Command("cli", "A CLI client for the Contour Kubernetes ingress controller.")
 	var client Client
-	cli.Flag("contour", "contour host:port.").Default("127.0.0.1:8001").StringVar(&client.ContourAddr)
-	cli.Flag("cafile", "CA bundle file for connecting to a TLS-secured Contour").Envar("CLI_CAFILE").StringVar(&client.CAFile)
-	cli.Flag("cert-file", "Client certificate file for connecting to a TLS-secured Contour").Envar("CLI_CERT_FILE").StringVar(&client.ClientCert)
-	cli.Flag("key-file", "Client key file for connecting to a TLS-secured Contour").Envar("CLI_KEY_FILE").StringVar(&client.ClientKey)
+	cli.Flag("contour", "Contour host:port.").Default("127.0.0.1:8001").StringVar(&client.ContourAddr)
+	cli.Flag("cafile", "CA bundle file for connecting to a TLS-secured Contour.").Envar("CLI_CAFILE").StringVar(&client.CAFile)
+	cli.Flag("cert-file", "Client certificate file for connecting to a TLS-secured Contour.").Envar("CLI_CERT_FILE").StringVar(&client.ClientCert)
+	cli.Flag("key-file", "Client key file for connecting to a TLS-secured Contour.").Envar("CLI_KEY_FILE").StringVar(&client.ClientKey)
 
 	var resources []string
-	cds := cli.Command("cds", "watch services.")
+	cds := cli.Command("cds", "Watch services.")
 	cds.Arg("resources", "CDS resource filter").StringsVar(&resources)
-	eds := cli.Command("eds", "watch endpoints.")
+	eds := cli.Command("eds", "Watch endpoints.")
 	eds.Arg("resources", "EDS resource filter").StringsVar(&resources)
-	lds := cli.Command("lds", "watch listerners.")
+	lds := cli.Command("lds", "Watch listeners.")
 	lds.Arg("resources", "LDS resource filter").StringsVar(&resources)
-	rds := cli.Command("rds", "watch routes.")
+	rds := cli.Command("rds", "Watch routes.")
 	rds.Arg("resources", "RDS resource filter").StringsVar(&resources)
-	sds := cli.Command("sds", "watch secrets.")
+	sds := cli.Command("sds", "Watch secrets.")
 	sds.Arg("resources", "SDS resource filter").StringsVar(&resources)
 
 	serve, serveCtx := registerServe(app)
@@ -92,32 +92,50 @@ func main() {
 		_, err := app.Parse(args)
 		check(err)
 		log.Infof("args: %v", args)
-		doServe(log, serveCtx)
+		check(doServe(log, serveCtx))
 	default:
 		app.Usage(args)
 		os.Exit(2)
 	}
 }
 
-func newClient(kubeconfig string, inCluster bool) (*kubernetes.Clientset, *clientset.Clientset, *coordinationv1.CoordinationV1Client) {
+type kubernetesClients struct {
+	core         *kubernetes.Clientset
+	contour      *clientset.Clientset
+	coordination *coordinationv1.CoordinationV1Client
+}
+
+func newKubernetesClients(kubeconfig string, inCluster bool) (kubernetesClients, error) {
 	var err error
 	var config *rest.Config
+	var clients kubernetesClients
+
 	if kubeconfig != "" && !inCluster {
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-		check(err)
 	} else {
 		config, err = rest.InClusterConfig()
-		check(err)
 	}
 
-	client, err := kubernetes.NewForConfig(config)
-	check(err)
-	contourClient, err := clientset.NewForConfig(config)
-	check(err)
-	coordinationClient, err := coordinationv1.NewForConfig(config)
-	check(err)
+	if err != nil {
+		return clients, err
+	}
 
-	return client, contourClient, coordinationClient
+	clients.core, err = kubernetes.NewForConfig(config)
+	if err != nil {
+		return clients, err
+	}
+
+	clients.contour, err = clientset.NewForConfig(config)
+	if err != nil {
+		return clients, err
+	}
+
+	clients.coordination, err = coordinationv1.NewForConfig(config)
+	if err != nil {
+		return clients, err
+	}
+
+	return clients, nil
 }
 
 func check(err error) {
