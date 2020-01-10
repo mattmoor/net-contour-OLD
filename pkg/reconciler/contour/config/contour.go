@@ -65,31 +65,27 @@ func NewContourFromConfigMap(configMap *corev1.ConfigMap) (*Contour, error) {
 			v1alpha1.IngressVisibilityExternalIP:   "contour",
 		}
 	} else {
-		value := make(map[v1alpha1.IngressVisibility]visibilityValue)
-		if err := yaml.Unmarshal([]byte(v), value); err != nil {
+		entry := make(map[v1alpha1.IngressVisibility]visibilityValue)
+		if err := yaml.Unmarshal([]byte(v), entry); err != nil {
 			return nil, err
 		}
 
-		if _, ok := value[v1alpha1.IngressVisibilityClusterLocal]; !ok {
-			return nil, fmt.Errorf("visibility must contain %q with class and service",
-				v1alpha1.IngressVisibilityClusterLocal)
-		}
-		if _, ok := value[v1alpha1.IngressVisibilityExternalIP]; !ok {
-			return nil, fmt.Errorf("visibility must contain %q with class and service",
-				v1alpha1.IngressVisibilityExternalIP)
+		for _, vis := range []v1alpha1.IngressVisibility{v1alpha1.IngressVisibilityClusterLocal, v1alpha1.IngressVisibilityExternalIP} {
+			if _, ok := entry[vis]; !ok {
+				return nil, fmt.Errorf("visibility must contain %q with class and service", vis)
+			}
 		}
 
-		for key, value := range value {
+		for key, value := range entry {
 			// Check that the visibility makes sense.
 			switch key {
 			case v1alpha1.IngressVisibilityClusterLocal, v1alpha1.IngressVisibilityExternalIP:
 			default:
-				return nil, fmt.Errorf("Unrecognized visibility: %q", key)
+				return nil, fmt.Errorf("unrecognized visibility: %q", key)
 			}
 
 			// See if the Service is a valid namespace/name token.
-			_, _, err := cache.SplitMetaNamespaceKey(value.Service)
-			if err != nil {
+			if _, _, err := cache.SplitMetaNamespaceKey(value.Service); err != nil {
 				return nil, err
 			}
 			contour.VisibilityKeys[key] = sets.NewString(value.Service)

@@ -96,7 +96,7 @@ func TestReconcile(t *testing.T) {
 		}},
 		WantDeleteCollections: []clientgotesting.DeleteCollectionActionImpl{{
 			ListRestrictions: clientgotesting.ListRestrictions{
-				Labels: mustParseLabels(t, "ingress.parent=name,ingress.generation!=0"),
+				Labels: deleteSelector(t, 0),
 				Fields: fields.Everything(),
 			},
 		}},
@@ -122,7 +122,7 @@ func TestReconcile(t *testing.T) {
 		// current generation are cleaned up.
 		WantDeleteCollections: []clientgotesting.DeleteCollectionActionImpl{{
 			ListRestrictions: clientgotesting.ListRestrictions{
-				Labels: mustParseLabels(t, "ingress.parent=name,ingress.generation!=0"),
+				Labels: deleteSelector(t, 0),
 				Fields: fields.Everything(),
 			},
 		}},
@@ -140,7 +140,7 @@ func TestReconcile(t *testing.T) {
 		WantDeleteCollections: []clientgotesting.DeleteCollectionActionImpl{{
 			ListRestrictions: clientgotesting.ListRestrictions{
 				// We delete the things that don't match the generation being reconciled.
-				Labels: mustParseLabels(t, "ingress.parent=name,ingress.generation!=1"),
+				Labels: deleteSelector(t, 1),
 				Fields: fields.Everything(),
 			},
 		}},
@@ -187,7 +187,7 @@ func TestReconcile(t *testing.T) {
 		}},
 		WantDeleteCollections: []clientgotesting.DeleteCollectionActionImpl{{
 			ListRestrictions: clientgotesting.ListRestrictions{
-				Labels: mustParseLabels(t, "ingress.parent=name,ingress.generation!=0"),
+				Labels: deleteSelector(t, 0),
 				Fields: fields.Everything(),
 			},
 		}},
@@ -249,7 +249,7 @@ func TestReconcile(t *testing.T) {
 		}, mustMakeProxies(t, ing("name", "ns", withBasicSpec, withContour))...), servicesAndEndpoints...),
 		WantDeleteCollections: []clientgotesting.DeleteCollectionActionImpl{{
 			ListRestrictions: clientgotesting.ListRestrictions{
-				Labels: mustParseLabels(t, "ingress.parent=name,ingress.generation!=0"),
+				Labels: deleteSelector(t, 0),
 				Fields: fields.Everything(),
 			},
 		}},
@@ -284,7 +284,7 @@ func TestReconcile(t *testing.T) {
 		}},
 		WantDeleteCollections: []clientgotesting.DeleteCollectionActionImpl{{
 			ListRestrictions: clientgotesting.ListRestrictions{
-				Labels: mustParseLabels(t, "ingress.parent=name,ingress.generation!=0"),
+				Labels: deleteSelector(t, 0),
 				Fields: fields.Everything(),
 			},
 		}},
@@ -352,13 +352,13 @@ func TestReconcile(t *testing.T) {
 
 	table.Test(t, MakeFactory(func(ctx context.Context, listers *Listers, cmw configmap.Watcher) controller.Reconciler {
 		return &Reconciler{
-			Client:          fakeservingclient.Get(ctx),
-			ContourClient:   fakecontourclient.Get(ctx),
-			Lister:          listers.GetIngressLister(),
-			ContourLister:   listers.GetHTTPProxyLister(),
-			ServiceLister:   listers.GetK8sServiceLister(),
-			EndpointsLister: listers.GetEndpointsLister(),
-			Recorder:        controller.GetEventRecorder(ctx),
+			client:          fakeservingclient.Get(ctx),
+			contourClient:   fakecontourclient.Get(ctx),
+			lister:          listers.GetIngressLister(),
+			contourLister:   listers.GetHTTPProxyLister(),
+			serviceLister:   listers.GetK8sServiceLister(),
+			endpointsLister: listers.GetEndpointsLister(),
+			recorder:        controller.GetEventRecorder(ctx),
 			tracker:         &NullTracker{},
 			statusManager: &fakeStatusManager{
 				FakeIsReady: func(context.Context, *v1alpha1.Ingress) (bool, error) {
@@ -390,7 +390,7 @@ func TestReconcileProberNotReady(t *testing.T) {
 		}},
 		WantDeleteCollections: []clientgotesting.DeleteCollectionActionImpl{{
 			ListRestrictions: clientgotesting.ListRestrictions{
-				Labels: mustParseLabels(t, "ingress.parent=name,ingress.generation!=0"),
+				Labels: deleteSelector(t, 0),
 				Fields: fields.Everything(),
 			},
 		}},
@@ -398,13 +398,13 @@ func TestReconcileProberNotReady(t *testing.T) {
 
 	table.Test(t, MakeFactory(func(ctx context.Context, listers *Listers, cmw configmap.Watcher) controller.Reconciler {
 		return &Reconciler{
-			Client:          fakeservingclient.Get(ctx),
-			ContourClient:   fakecontourclient.Get(ctx),
-			Lister:          listers.GetIngressLister(),
-			ContourLister:   listers.GetHTTPProxyLister(),
-			ServiceLister:   listers.GetK8sServiceLister(),
-			EndpointsLister: listers.GetEndpointsLister(),
-			Recorder:        controller.GetEventRecorder(ctx),
+			client:          fakeservingclient.Get(ctx),
+			contourClient:   fakecontourclient.Get(ctx),
+			lister:          listers.GetIngressLister(),
+			contourLister:   listers.GetHTTPProxyLister(),
+			serviceLister:   listers.GetK8sServiceLister(),
+			endpointsLister: listers.GetEndpointsLister(),
+			recorder:        controller.GetEventRecorder(ctx),
 			tracker:         &NullTracker{},
 			statusManager: &fakeStatusManager{
 				FakeIsReady: func(context.Context, *v1alpha1.Ingress) (bool, error) {
@@ -438,7 +438,7 @@ func TestReconcileProbeError(t *testing.T) {
 		}},
 		WantDeleteCollections: []clientgotesting.DeleteCollectionActionImpl{{
 			ListRestrictions: clientgotesting.ListRestrictions{
-				Labels: mustParseLabels(t, "ingress.parent=name,ingress.generation!=0"),
+				Labels: deleteSelector(t, 0),
 				Fields: fields.Everything(),
 			},
 		}},
@@ -449,13 +449,13 @@ func TestReconcileProbeError(t *testing.T) {
 
 	table.Test(t, MakeFactory(func(ctx context.Context, listers *Listers, cmw configmap.Watcher) controller.Reconciler {
 		return &Reconciler{
-			Client:          fakeservingclient.Get(ctx),
-			ContourClient:   fakecontourclient.Get(ctx),
-			Lister:          listers.GetIngressLister(),
-			ContourLister:   listers.GetHTTPProxyLister(),
-			ServiceLister:   listers.GetK8sServiceLister(),
-			EndpointsLister: listers.GetEndpointsLister(),
-			Recorder:        controller.GetEventRecorder(ctx),
+			client:          fakeservingclient.Get(ctx),
+			contourClient:   fakecontourclient.Get(ctx),
+			lister:          listers.GetIngressLister(),
+			contourLister:   listers.GetHTTPProxyLister(),
+			serviceLister:   listers.GetK8sServiceLister(),
+			endpointsLister: listers.GetEndpointsLister(),
+			recorder:        controller.GetEventRecorder(ctx),
 			tracker:         &NullTracker{},
 			statusManager: &fakeStatusManager{
 				FakeIsReady: func(context.Context, *v1alpha1.Ingress) (bool, error) {
@@ -555,8 +555,9 @@ func mustMakeProxies(t *testing.T, i *v1alpha1.Ingress) (objs []runtime.Object) 
 	return
 }
 
-func mustParseLabels(t *testing.T, ls string) labels.Selector {
-	l, err := labels.Parse(ls)
+func deleteSelector(t *testing.T, generation int) labels.Selector {
+	l, err := labels.Parse(fmt.Sprintf("%s=name,%s!=%d",
+		resources.ParentKey, resources.GenerationKey, generation))
 	if err != nil {
 		t.Fatalf("labels.Parse() = %v", err)
 	}

@@ -33,7 +33,6 @@ import (
 	"knative.dev/serving/pkg/network"
 
 	. "knative.dev/pkg/reconciler/testing"
-	// . "knative.dev/serving/pkg/reconciler/testing/v1alpha1"
 )
 
 func TestNew(t *testing.T) {
@@ -55,68 +54,3 @@ func TestNew(t *testing.T) {
 		t.Fatal("Expected NewController to return a non-nil value")
 	}
 }
-
-// TODO(mattmoor): DO NOT SUBMIT
-// func TestKeyLookup(t *testing.T) {
-// 	tests := []struct {
-// 		name    string
-// 		key     string
-// 		objects []runtime.Object
-// 		wantErr bool
-// 	}{{
-// 		name:    "bad key",
-// 		key:     "this/is/a/bad/key",
-// 		wantErr: true,
-// 	}, {
-// 		name:    "missing namespace",
-// 		key:     "missing-namespace",
-// 		wantErr: true,
-// 	}, {
-// 		name:    "service not found",
-// 		key:     "not/found",
-// 		wantErr: true,
-// 	}, {
-// 		name:    "endpoints not found",
-// 		key:     "no/endpoints",
-// 		wantErr: true,
-// 		objects: []runtime.Object{
-// 			&corev1.Service{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Namespace: "no",
-// 					Name:      "endpoints",
-// 				},
-// 			},
-// 		},
-// 	}, {
-// 		name:    "everything is fine",
-// 		key:     "peachy/keen",
-// 		wantErr: false,
-// 		objects: []runtime.Object{
-// 			&corev1.Service{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Namespace: "peachy",
-// 					Name:      "keen",
-// 				},
-// 			},
-// 			&corev1.Endpoints{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Namespace: "peachy",
-// 					Name:      "keen",
-// 				},
-// 			},
-// 		},
-// 	}}
-
-// 	for _, test := range tests {
-// 		t.Run(test.name, func(t *testing.T) {
-// 			logger := testlogging.TestLogger(t)
-// 			l := NewListers(test.objects)
-// 			kl := keyLookup(logger, l.GetK8sServiceLister(), l.GetEndpointsLister())
-
-// 			_, _, _, err := kl(test.key)
-// 			if (err != nil) != test.wantErr {
-// 				t.Errorf("keyLookup() = %v, wanted error is %v", err, test.wantErr)
-// 			}
-// 		})
-// 	}
-// }

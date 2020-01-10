@@ -24,6 +24,7 @@ import (
 	logtesting "knative.dev/pkg/logging/testing"
 
 	. "knative.dev/pkg/configmap/testing"
+	"knative.dev/serving/pkg/apis/networking/v1alpha1"
 	"knative.dev/serving/pkg/network"
 )
 
@@ -55,16 +56,17 @@ func TestStoreImmutableConfig(t *testing.T) {
 
 	config := store.Load()
 
-	// TODO(mattmoor): DO NOT SUBMIT
-	// config.Contour.IngressGateways = []Gateway{{Name: "mutated", ServiceURL: "mutated"}}
+	mutated := map[v1alpha1.IngressVisibility]string{
+		"foo": "bar",
+	}
+	config.Contour.VisibilityClasses = mutated
 	config.Network.HTTPProtocol = network.HTTPRedirected
 
 	newConfig := store.Load()
 
-	// TODO(mattmoor): DO NOT SUBMIT
-	// if newConfig.Contour.IngressGateways[0].Name == "mutated" {
-	// 	t.Error("Contour config is not immutable")
-	// }
+	if cmp.Equal(newConfig.Contour.VisibilityClasses, mutated) {
+		t.Error("Contour config is not immutable")
+	}
 	if newConfig.Network.HTTPProtocol == network.HTTPRedirected {
 		t.Error("Network config is not immuable")
 	}

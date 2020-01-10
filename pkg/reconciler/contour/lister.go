@@ -45,7 +45,10 @@ func (l *lister) ListProbeTargets(ctx context.Context, ing *v1alpha1.Ingress) ([
 
 	visibilityKeys := config.FromContext(ctx).Contour.VisibilityKeys
 	for key, hosts := range ingress.HostsPerVisibility(ing, visibilityKeys) {
-		namespace, name, _ := cache.SplitMetaNamespaceKey(key)
+		namespace, name, err := cache.SplitMetaNamespaceKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse key: %w", err)
+		}
 
 		service, err := l.ServiceLister.Services(namespace).Get(name)
 		if err != nil {
@@ -57,8 +60,8 @@ func (l *lister) ListProbeTargets(ctx context.Context, ing *v1alpha1.Ingress) ([
 			return nil, fmt.Errorf("failed to get Endpoints: %w", err)
 		}
 
-		var urls []*url.URL
-		for _, host := range hosts.List() {
+		urls := make([]*url.URL, 0, hosts.Len())
+		for _, host := range hosts.UnsortedList() {
 			urls = append(urls, &url.URL{
 				Scheme: "http",
 				Host:   host,

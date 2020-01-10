@@ -66,13 +66,13 @@ func NewController(
 	podInformer := podinformer.Get(ctx)
 
 	c := &Reconciler{
-		Client:          servingclient.Get(ctx),
-		ContourClient:   contourclient.Get(ctx),
-		Lister:          ingressInformer.Lister(),
-		ContourLister:   proxyInformer.Lister(),
-		ServiceLister:   serviceInformer.Lister(),
-		EndpointsLister: endpointsInformer.Lister(),
-		Recorder: record.NewBroadcaster().NewRecorder(
+		client:          servingclient.Get(ctx),
+		contourClient:   contourclient.Get(ctx),
+		lister:          ingressInformer.Lister(),
+		contourLister:   proxyInformer.Lister(),
+		serviceLister:   serviceInformer.Lister(),
+		endpointsLister: endpointsInformer.Lister(),
+		recorder: record.NewBroadcaster().NewRecorder(
 			scheme.Scheme, corev1.EventSource{Component: controllerAgentName}),
 	}
 	impl := controller.NewImpl(c, logger, "ContourIngresses")

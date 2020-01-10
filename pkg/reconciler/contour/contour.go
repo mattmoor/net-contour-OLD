@@ -49,18 +49,18 @@ import (
 // Reconciler implements controller.Reconciler for Ingress resources.
 type Reconciler struct {
 	// Client is used to write back status updates.
-	Client        clientset.Interface
-	ContourClient contourclientset.Interface
+	client        clientset.Interface
+	contourClient contourclientset.Interface
 
 	// Listers index properties about resources
-	Lister          listers.IngressLister
-	ContourLister   contourlisters.HTTPProxyLister
-	ServiceLister   corev1listers.ServiceLister
-	EndpointsLister corev1listers.EndpointsLister
+	lister          listers.IngressLister
+	contourLister   contourlisters.HTTPProxyLister
+	serviceLister   corev1listers.ServiceLister
+	endpointsLister corev1listers.EndpointsLister
 
 	// Recorder is an event recorder for recording Event resources to the
 	// Kubernetes API.
-	Recorder record.EventRecorder
+	recorder record.EventRecorder
 
 	statusManager status.Manager
 	configStore   reconciler.ConfigStore
@@ -78,7 +78,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, key string) error {
 	// Convert the namespace/name string into a distinct namespace and name
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
-		logger.Errorf("invalid resource key: %s", key)
+		logger.Errorf("Invalid resource key: %q.", key)
 		return nil
 	}
 
@@ -87,17 +87,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, key string) error {
 	//    ctx = r.configStore.ToContext(ctx)
 
 	// Get the resource with this namespace/name.
-	original, err := r.Lister.Ingresses(namespace).Get(name)
+	original, err := r.lister.Ingresses(namespace).Get(name)
 	if apierrs.IsNotFound(err) {
 		// The resource may no longer exist, in which case we stop processing.
-		logger.Errorf("resource %q no longer exists", key)
+		logger.Errorf("Resource %q no longer exists.", key)
 		return nil
 	} else if err != nil {
 		return err
 	} else if original.Annotations != nil {
 		class := original.Annotations[networking.IngressClassAnnotationKey]
 		if class != ContourIngressClassName {
-			logger.Debugf("resource %q is not our class", key)
+			logger.Debugf("Resource %q is not our class.", key)
 			return nil
 		}
 	}
@@ -113,13 +113,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, key string) error {
 		// cache may be stale and we don't want to overwrite a prior update
 		// to status with this stale state.
 	} else if _, err = r.updateStatus(resource); err != nil {
-		logger.Warnw("Failed to update resource status", zap.Error(err))
-		r.Recorder.Eventf(resource, corev1.EventTypeWarning, "UpdateFailed",
+		logger.Warnw("Failed to update resource status.", zap.Error(err))
+		r.recorder.Eventf(resource, corev1.EventTypeWarning, "UpdateFailed",
 			"Failed to update status for %q: %v", resource.Name, err)
 		return err
 	}
 	if reconcileErr != nil {
-		r.Recorder.Event(resource, corev1.EventTypeWarning, "InternalError", reconcileErr.Error())
+		r.recorder.Event(resource, corev1.EventTypeWarning, "InternalError", reconcileErr.Error())
 	}
 	return reconcileErr
 }
@@ -155,14 +155,14 @@ func (r *Reconciler) reconcileProxies(ctx context.Context, ing *v1alpha1.Ingress
 		}, ing); err != nil {
 			return err
 		}
-		svc, err := r.ServiceLister.Services(ing.Namespace).Get(name)
+		svc, err := r.serviceLister.Services(ing.Namespace).Get(name)
 		if err != nil {
 			return err
 		}
 		for _, port := range svc.Spec.Ports {
-			switch port.Name {
-			case networking.ServicePortNameH2C:
+			if port.Name == networking.ServicePortNameH2C {
 				serviceToProtocol[name] = "h2c"
+				break
 			}
 		}
 
@@ -174,7 +174,7 @@ func (r *Reconciler) reconcileProxies(ctx context.Context, ing *v1alpha1.Ingress
 		}, ing); err != nil {
 			return err
 		}
-		ep, err := r.EndpointsLister.Endpoints(ing.Namespace).Get(name)
+		ep, err := r.endpointsLister.Endpoints(ing.Namespace).Get(name)
 		if err != nil {
 			return err
 		}
@@ -189,16 +189,15 @@ func (r *Reconciler) reconcileProxies(ctx context.Context, ing *v1alpha1.Ingress
 
 	for _, proxy := range resources.MakeHTTPProxies(ctx, ing, serviceToProtocol) {
 		selector := labels.Set(map[string]string{
-			"ingress.parent": proxy.Labels["ingress.parent"],
-			"ingress.fqdn":   proxy.Labels["ingress.fqdn"],
+			resources.ParentKey:     proxy.Labels[resources.ParentKey],
+			resources.DomainHashKey: proxy.Labels[resources.DomainHashKey],
 		}).AsSelector()
-		elts, err := r.ContourLister.HTTPProxies(ing.Namespace).List(selector)
+		elts, err := r.contourLister.HTTPProxies(ing.Namespace).List(selector)
 		if err != nil {
 			return err
 		}
 		if len(elts) == 0 {
-			_, err := r.ContourClient.ProjectcontourV1().HTTPProxies(proxy.Namespace).Create(proxy)
-			if err != nil {
+			if _, err := r.contourClient.ProjectcontourV1().HTTPProxies(proxy.Namespace).Create(proxy); err != nil {
 				return err
 			}
 			continue
@@ -211,19 +210,18 @@ func (r *Reconciler) reconcileProxies(ctx context.Context, ing *v1alpha1.Ingress
 			// Avoid updates that don't change anything.
 			continue
 		}
-		_, err = r.ContourClient.ProjectcontourV1().HTTPProxies(proxy.Namespace).Update(update)
-		if err != nil {
+		if _, err = r.contourClient.ProjectcontourV1().HTTPProxies(proxy.Namespace).Update(update); err != nil {
 			return err
 		}
 	}
 
-	err := r.ContourClient.ProjectcontourV1().HTTPProxies(ing.Namespace).DeleteCollection(
+	if err := r.contourClient.ProjectcontourV1().HTTPProxies(ing.Namespace).DeleteCollection(
 		&metav1.DeleteOptions{},
 		metav1.ListOptions{
-			LabelSelector: fmt.Sprintf(
-				"ingress.parent=%s,ingress.generation!=%d", ing.Name, ing.Generation),
-		})
-	if err != nil {
+			LabelSelector: fmt.Sprintf("%s=%s,%s!=%d",
+				resources.ParentKey, ing.Name,
+				resources.GenerationKey, ing.Generation),
+		}); err != nil {
 		return err
 	}
 	ing.Status.MarkNetworkConfigured()
@@ -258,7 +256,7 @@ func lbStatus(ctx context.Context, vis v1alpha1.IngressVisibility) (lbs []v1alph
 // Update the Status of the resource.  Caller is responsible for checking
 // for semantic differences before calling.
 func (r *Reconciler) updateStatus(desired *v1alpha1.Ingress) (*v1alpha1.Ingress, error) {
-	actual, err := r.Lister.Ingresses(desired.Namespace).Get(desired.Name)
+	actual, err := r.lister.Ingresses(desired.Namespace).Get(desired.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -269,5 +267,5 @@ func (r *Reconciler) updateStatus(desired *v1alpha1.Ingress) (*v1alpha1.Ingress,
 	// Don't modify the informers copy
 	existing := actual.DeepCopy()
 	existing.Status = desired.Status
-	return r.Client.NetworkingV1alpha1().Ingresses(desired.Namespace).UpdateStatus(existing)
+	return r.client.NetworkingV1alpha1().Ingresses(desired.Namespace).UpdateStatus(existing)
 }

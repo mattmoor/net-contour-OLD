@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"knative.dev/pkg/kmeta"
 	"knative.dev/pkg/network"
+	"knative.dev/pkg/ptr"
 	"knative.dev/serving/pkg/apis/networking/v1alpha1"
 	servingnetwork "knative.dev/serving/pkg/network"
 	"knative.dev/serving/pkg/network/ingress"
@@ -120,7 +121,7 @@ func MakeHTTPProxies(ctx context.Context, ing *v1alpha1.Ingress, serviceToProtoc
 				}
 				var protocol *string
 				if proto, ok := serviceToProtocol[split.ServiceName]; ok {
-					protocol = &proto
+					protocol = ptr.String(proto)
 				}
 				svcs = append(svcs, v1.Service{
 					Name:                 split.ServiceName,
@@ -156,8 +157,8 @@ func MakeHTTPProxies(ctx context.Context, ing *v1alpha1.Ingress, serviceToProtoc
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: ing.Namespace,
 				Labels: map[string]string{
-					"ingress.generation": fmt.Sprintf("%d", ing.Generation),
-					"ingress.parent":     ing.Name,
+					GenerationKey: fmt.Sprintf("%d", ing.Generation),
+					ParentKey:     ing.Name,
 				},
 				Annotations: map[string]string{
 					"kubernetes.io/ingress.class": class,
@@ -177,7 +178,7 @@ func MakeHTTPProxies(ctx context.Context, ing *v1alpha1.Ingress, serviceToProtoc
 				hostProxy.Spec.VirtualHost = &v1.VirtualHost{
 					Fqdn: host,
 				}
-				hostProxy.Labels["ingress.fqdn"] = fmt.Sprintf("%x", sha1.Sum([]byte(host)))
+				hostProxy.Labels[DomainHashKey] = fmt.Sprintf("%x", sha1.Sum([]byte(host)))
 
 				if tls, ok := hostToTLS[host]; ok {
 					// TODO(mattmoor): How do we deal with custom secret schemas?

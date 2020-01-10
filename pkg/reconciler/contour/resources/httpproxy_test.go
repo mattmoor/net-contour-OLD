@@ -96,9 +96,9 @@ func TestMakeProxies(t *testing.T) {
 				Namespace: "foo",
 				Name:      "bar-example.com",
 				Labels: map[string]string{
-					"ingress.fqdn":       "0caaf24ab1a0c33440c06afe99df986365b0781f",
-					"ingress.generation": "0",
-					"ingress.parent":     "bar",
+					DomainHashKey: "0caaf24ab1a0c33440c06afe99df986365b0781f",
+					GenerationKey: "0",
+					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
 					"kubernetes.io/ingress.class": publicClass,
@@ -187,9 +187,9 @@ func TestMakeProxies(t *testing.T) {
 				Namespace: "foo",
 				Name:      "bar-foo.bar",
 				Labels: map[string]string{
-					"ingress.fqdn":       "336d1b3d72e061b98b59d6c793f6a8da217a727a",
-					"ingress.generation": "0",
-					"ingress.parent":     "bar",
+					DomainHashKey: "336d1b3d72e061b98b59d6c793f6a8da217a727a",
+					GenerationKey: "0",
+					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
 					"kubernetes.io/ingress.class": privateClass,
@@ -228,9 +228,9 @@ func TestMakeProxies(t *testing.T) {
 				Namespace: "foo",
 				Name:      "bar-foo.bar.svc",
 				Labels: map[string]string{
-					"ingress.fqdn":       "c537bbef14c1570803e5c51c6ca824524c758496",
-					"ingress.generation": "0",
-					"ingress.parent":     "bar",
+					DomainHashKey: "c537bbef14c1570803e5c51c6ca824524c758496",
+					GenerationKey: "0",
+					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
 					"kubernetes.io/ingress.class": privateClass,
@@ -269,9 +269,9 @@ func TestMakeProxies(t *testing.T) {
 				Namespace: "foo",
 				Name:      "bar-foo.bar.svc.cluster.local",
 				Labels: map[string]string{
-					"ingress.fqdn":       "6f498a962729705e1c12fdef2c3371c00f5094e9",
-					"ingress.generation": "0",
-					"ingress.parent":     "bar",
+					DomainHashKey: "6f498a962729705e1c12fdef2c3371c00f5094e9",
+					GenerationKey: "0",
+					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
 					"kubernetes.io/ingress.class": privateClass,
@@ -341,9 +341,9 @@ func TestMakeProxies(t *testing.T) {
 				Namespace: "foo",
 				Name:      "bar-example.com",
 				Labels: map[string]string{
-					"ingress.fqdn":       "0caaf24ab1a0c33440c06afe99df986365b0781f",
-					"ingress.generation": "0",
-					"ingress.parent":     "bar",
+					DomainHashKey: "0caaf24ab1a0c33440c06afe99df986365b0781f",
+					GenerationKey: "0",
+					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
 					"kubernetes.io/ingress.class": privateClass,
@@ -425,9 +425,9 @@ func TestMakeProxies(t *testing.T) {
 				Namespace: "foo",
 				Name:      "bar-example.com",
 				Labels: map[string]string{
-					"ingress.fqdn":       "0caaf24ab1a0c33440c06afe99df986365b0781f",
-					"ingress.generation": "0",
-					"ingress.parent":     "bar",
+					DomainHashKey: "0caaf24ab1a0c33440c06afe99df986365b0781f",
+					GenerationKey: "0",
+					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
 					"kubernetes.io/ingress.class": publicClass,
@@ -533,9 +533,9 @@ func TestMakeProxies(t *testing.T) {
 				Namespace: "foo",
 				Name:      "bar-example.com",
 				Labels: map[string]string{
-					"ingress.fqdn":       "0caaf24ab1a0c33440c06afe99df986365b0781f",
-					"ingress.generation": "0",
-					"ingress.parent":     "bar",
+					DomainHashKey: "0caaf24ab1a0c33440c06afe99df986365b0781f",
+					GenerationKey: "0",
+					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
 					"kubernetes.io/ingress.class": publicClass,
@@ -643,9 +643,9 @@ func TestMakeProxies(t *testing.T) {
 				Namespace: "foo",
 				Name:      "bar-example.com",
 				Labels: map[string]string{
-					"ingress.fqdn":       "0caaf24ab1a0c33440c06afe99df986365b0781f",
-					"ingress.generation": "0",
-					"ingress.parent":     "bar",
+					DomainHashKey: "0caaf24ab1a0c33440c06afe99df986365b0781f",
+					GenerationKey: "0",
+					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
 					"kubernetes.io/ingress.class": publicClass,
