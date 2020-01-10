@@ -14,6 +14,18 @@ required = [
 ]
 
 [[override]]
+  name = "github.com/projectcontour/contour"
+  version = "1.1.0"
+
+[[override]]
+  name = "knative.dev/pkg"
+  branch = "master"
+
+[[override]]
+  name = "knative.dev/serving"
+  branch = "master"
+
+[[override]]
   name = "k8s.io/klog"
   version = "v0.2.0"
 
@@ -38,6 +50,10 @@ required = [
   version = "kubernetes-1.15.3"
 
 [[override]]
+  name = "k8s.io/apiextensions-apiserver"
+  version = "kubernetes-1.15.3"
+
+[[override]]
   name = "github.com/gogo/protobuf"
   version = "v1.3.1"
 
@@ -48,10 +64,6 @@ required = [
 [[override]]
   name = "istio.io/client-go"
   version = "1.4.0-beta.2"
-
-[[override]]
-  name = "knative.dev/pkg"
-  branch = "release-0.11"
 
 [[override]]
   name = "google.golang.org/genproto"
@@ -69,6 +81,11 @@ required = [
 
 [[prune.project]]
   name = "knative.dev/pkg"
+  unused-packages = false
+  non-go = false
+
+[[prune.project]]
+  name = "knative.dev/serving"
   unused-packages = false
   non-go = false
 

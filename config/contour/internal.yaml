@@ -192,9 +192,6 @@ spec:
   - port: 80
     name: http
     protocol: TCP
-  - port: 443
-    name: https
-    protocol: TCP
   selector:
     app: envoy-internal
   type: ClusterIP
@@ -232,7 +229,7 @@ spec:
         - --log-level info
         command:
         - envoy
-        image: docker.io/envoyproxy/envoy:v1.11.2
+        image: docker.io/envoyproxy/envoy:v1.12.2
         imagePullPolicy: IfNotPresent
         name: envoy
         env:

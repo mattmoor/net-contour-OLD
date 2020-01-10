@@ -28,14 +28,16 @@ import (
 // with the Application provided.
 func registerCertGen(app *kingpin.Application) (*kingpin.CmdClause, *certgenConfig) {
 	var certgenConfig certgenConfig
-	certgenApp := app.Command("certgen", "Generate new TLS certs for bootstrapping gRPC over TLS")
-	certgenApp.Flag("kube", "Apply the generated certs directly to the current Kubernetes cluster").BoolVar(&certgenConfig.OutputKube)
-	certgenApp.Flag("yaml", "Render the generated certs as Kubernetes Secrets in YAML form to the current directory").BoolVar(&certgenConfig.OutputYAML)
-	certgenApp.Flag("pem", "Render the generated certs as individual PEM files to the current directory").BoolVar(&certgenConfig.OutputPEM)
-	certgenApp.Flag("incluster", "use in cluster configuration.").BoolVar(&certgenConfig.InCluster)
-	certgenApp.Flag("kubeconfig", "path to kubeconfig (if not in running inside a cluster)").Default(filepath.Join(os.Getenv("HOME"), ".kube", "config")).StringVar(&certgenConfig.KubeConfig)
-	certgenApp.Flag("namespace", "Kubernetes namespace, used for Kube objects").Default("projectcontour").Envar("CONTOUR_NAMESPACE").StringVar(&certgenConfig.Namespace)
-	certgenApp.Arg("outputdir", "Directory to output any files to").Default("certs").StringVar(&certgenConfig.OutputDir)
+	certgenApp := app.Command("certgen", "Generate new TLS certs for bootstrapping gRPC over TLS.")
+	certgenApp.Flag("kube", "Apply the generated certs directly to the current Kubernetes cluster.").BoolVar(&certgenConfig.OutputKube)
+	certgenApp.Flag("yaml", "Render the generated certs as Kubernetes Secrets in YAML form to the current directory.").BoolVar(&certgenConfig.OutputYAML)
+	certgenApp.Flag("pem", "Render the generated certs as individual PEM files to the current directory.").BoolVar(&certgenConfig.OutputPEM)
+	certgenApp.Flag("incluster", "Use in cluster configuration.").BoolVar(&certgenConfig.InCluster)
+	certgenApp.Flag("kubeconfig", "Path to kubeconfig (if not in running inside a cluster).").Default(filepath.Join(os.Getenv("HOME"), ".kube", "config")).StringVar(&certgenConfig.KubeConfig)
+	certgenApp.Flag("namespace", "Kubernetes namespace, used for Kube objects.").Default("projectcontour").Envar("CONTOUR_NAMESPACE").StringVar(&certgenConfig.Namespace)
+	certgenApp.Arg("outputdir", "Directory to write output files into.").Default("certs").StringVar(&certgenConfig.OutputDir)
+	// NOTE: --certificate-lifetime can be used to accept Duration string once certificate rotation is supported.
+	certgenApp.Flag("certificate-lifetime", "Generated certificate lifetime (in days).").Default("365").UintVar(&certgenConfig.Lifetime)
 
 	return certgenApp, &certgenConfig
 }
@@ -63,13 +65,16 @@ type certgenConfig struct {
 
 	// OutputPEM means that the certs generated will be output as PEM files in the current directory.
 	OutputPEM bool
+
+	// Lifetime is the number of days for which certificates will be valid.
+	Lifetime uint
 }
 
 // GenerateCerts performs the actual cert generation steps and then returns the certs for the output function.
 func GenerateCerts(certConfig *certgenConfig) (map[string][]byte, error) {
 
 	now := time.Now()
-	expiry := now.Add(24 * 365 * time.Hour)
+	expiry := now.Add(24 * time.Duration(certConfig.Lifetime) * time.Hour)
 	caCertPEM, caKeyPEM, err := certgen.NewCA("Project Contour", expiry)
 	if err != nil {
 		return nil, err
@@ -128,6 +133,11 @@ func OutputCerts(config *certgenConfig,
 func doCertgen(config *certgenConfig) {
 	generatedCerts, err := GenerateCerts(config)
 	check(err)
-	kubeclient, _, _ := newClient(config.KubeConfig, config.InCluster)
-	OutputCerts(config, kubeclient, generatedCerts)
+
+	clients, err := newKubernetesClients(config.KubeConfig, config.InCluster)
+	if err != nil {
+		check(fmt.Errorf("failed to create Kubernetes client: %w", err))
+	}
+
+	OutputCerts(config, clients.core, generatedCerts)
 }

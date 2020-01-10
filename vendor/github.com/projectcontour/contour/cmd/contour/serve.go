@@ -46,7 +46,7 @@ import (
 // registerServe registers the serve subcommand and flags
 // with the Application provided.
 func registerServe(app *kingpin.Application) (*kingpin.CmdClause, *serveContext) {
-	serve := app.Command("serve", "Serve xDS API traffic")
+	serve := app.Command("serve", "Serve xDS API traffic.")
 
 	// The precedence of configuration for contour serve is as follows:
 	// config file, overridden by env vars, overridden by cli flags.
@@ -77,63 +77,65 @@ func registerServe(app *kingpin.Application) (*kingpin.CmdClause, *serveContext)
 		return dec.Decode(&ctx)
 	}
 
-	serve.Flag("config-path", "path to base configuration").Short('c').Action(parseConfig).ExistingFileVar(&configFile)
+	serve.Flag("config-path", "Path to base configuration.").Short('c').Action(parseConfig).ExistingFileVar(&configFile)
 
-	serve.Flag("incluster", "use in cluster configuration.").BoolVar(&ctx.InCluster)
-	serve.Flag("kubeconfig", "path to kubeconfig (if not in running inside a cluster)").StringVar(&ctx.Kubeconfig)
+	serve.Flag("incluster", "Use in cluster configuration.").BoolVar(&ctx.InCluster)
+	serve.Flag("kubeconfig", "Path to kubeconfig (if not in running inside a cluster).").StringVar(&ctx.Kubeconfig)
 
-	serve.Flag("xds-address", "xDS gRPC API address").StringVar(&ctx.xdsAddr)
-	serve.Flag("xds-port", "xDS gRPC API port").IntVar(&ctx.xdsPort)
+	serve.Flag("xds-address", "xDS gRPC API address.").StringVar(&ctx.xdsAddr)
+	serve.Flag("xds-port", "xDS gRPC API port.").IntVar(&ctx.xdsPort)
 
-	serve.Flag("stats-address", "Envoy /stats interface address").StringVar(&ctx.statsAddr)
-	serve.Flag("stats-port", "Envoy /stats interface port").IntVar(&ctx.statsPort)
+	serve.Flag("stats-address", "Envoy /stats interface address.").StringVar(&ctx.statsAddr)
+	serve.Flag("stats-port", "Envoy /stats interface port.").IntVar(&ctx.statsPort)
 
-	serve.Flag("debug-http-address", "address the debug http endpoint will bind to").StringVar(&ctx.debugAddr)
-	serve.Flag("debug-http-port", "port the debug http endpoint will bind to").IntVar(&ctx.debugPort)
+	serve.Flag("debug-http-address", "Address the debug http endpoint will bind to.").StringVar(&ctx.debugAddr)
+	serve.Flag("debug-http-port", "Port the debug http endpoint will bind to.").IntVar(&ctx.debugPort)
 
-	serve.Flag("http-address", "address the metrics http endpoint will bind to").StringVar(&ctx.metricsAddr)
-	serve.Flag("http-port", "port the metrics http endpoint will bind to").IntVar(&ctx.metricsPort)
+	serve.Flag("http-address", "Address the metrics http endpoint will bind to.").StringVar(&ctx.metricsAddr)
+	serve.Flag("http-port", "Port the metrics http endpoint will bind to.").IntVar(&ctx.metricsPort)
 
-	serve.Flag("contour-cafile", "CA bundle file name for serving gRPC with TLS").Envar("CONTOUR_CAFILE").StringVar(&ctx.caFile)
-	serve.Flag("contour-cert-file", "Contour certificate file name for serving gRPC over TLS").Envar("CONTOUR_CERT_FILE").StringVar(&ctx.contourCert)
-	serve.Flag("contour-key-file", "Contour key file name for serving gRPC over TLS").Envar("CONTOUR_KEY_FILE").StringVar(&ctx.contourKey)
-	serve.Flag("insecure", "Allow serving without TLS secured gRPC").BoolVar(&ctx.PermitInsecureGRPC)
+	serve.Flag("contour-cafile", "CA bundle file name for serving gRPC with TLS.").Envar("CONTOUR_CAFILE").StringVar(&ctx.caFile)
+	serve.Flag("contour-cert-file", "Contour certificate file name for serving gRPC over TLS.").Envar("CONTOUR_CERT_FILE").StringVar(&ctx.contourCert)
+	serve.Flag("contour-key-file", "Contour key file name for serving gRPC over TLS.").Envar("CONTOUR_KEY_FILE").StringVar(&ctx.contourKey)
+	serve.Flag("insecure", "Allow serving without TLS secured gRPC.").BoolVar(&ctx.PermitInsecureGRPC)
 	// TODO(sas) Deprecate `ingressroute-root-namespaces` in v1.0
-	serve.Flag("ingressroute-root-namespaces", "DEPRECATED (Use 'root-namespaces'): Restrict contour to searching these namespaces for root ingress routes").StringVar(&ctx.rootNamespaces)
-	serve.Flag("root-namespaces", "Restrict contour to searching these namespaces for root ingress routes").StringVar(&ctx.rootNamespaces)
+	serve.Flag("ingressroute-root-namespaces", "DEPRECATED (Use 'root-namespaces'): Restrict contour to searching these namespaces for root ingress routes.").StringVar(&ctx.rootNamespaces)
+	serve.Flag("root-namespaces", "Restrict contour to searching these namespaces for root ingress routes.").StringVar(&ctx.rootNamespaces)
 
-	serve.Flag("ingress-class-name", "Contour IngressClass name").StringVar(&ctx.ingressClass)
+	serve.Flag("ingress-class-name", "Contour IngressClass name.").StringVar(&ctx.ingressClass)
 
-	serve.Flag("envoy-http-access-log", "Envoy HTTP access log").StringVar(&ctx.httpAccessLog)
-	serve.Flag("envoy-https-access-log", "Envoy HTTPS access log").StringVar(&ctx.httpsAccessLog)
-	serve.Flag("envoy-service-http-address", "Kubernetes Service address for HTTP requests").StringVar(&ctx.httpAddr)
-	serve.Flag("envoy-service-https-address", "Kubernetes Service address for HTTPS requests").StringVar(&ctx.httpsAddr)
-	serve.Flag("envoy-service-http-port", "Kubernetes Service port for HTTP requests").IntVar(&ctx.httpPort)
-	serve.Flag("envoy-service-https-port", "Kubernetes Service port for HTTPS requests").IntVar(&ctx.httpsPort)
-	serve.Flag("use-proxy-protocol", "Use PROXY protocol for all listeners").BoolVar(&ctx.useProxyProto)
+	serve.Flag("envoy-http-access-log", "Envoy HTTP access log.").StringVar(&ctx.httpAccessLog)
+	serve.Flag("envoy-https-access-log", "Envoy HTTPS access log.").StringVar(&ctx.httpsAccessLog)
+	serve.Flag("envoy-service-http-address", "Kubernetes Service address for HTTP requests.").StringVar(&ctx.httpAddr)
+	serve.Flag("envoy-service-https-address", "Kubernetes Service address for HTTPS requests.").StringVar(&ctx.httpsAddr)
+	serve.Flag("envoy-service-http-port", "Kubernetes Service port for HTTP requests.").IntVar(&ctx.httpPort)
+	serve.Flag("envoy-service-https-port", "Kubernetes Service port for HTTPS requests.").IntVar(&ctx.httpsPort)
+	serve.Flag("use-proxy-protocol", "Use PROXY protocol for all listeners.").BoolVar(&ctx.useProxyProto)
 
-	serve.Flag("accesslog-format", "Format for Envoy access logs").StringVar(&ctx.AccessLogFormat)
-	serve.Flag("disable-leader-election", "Disable leader election mechanism").BoolVar(&ctx.DisableLeaderElection)
+	serve.Flag("accesslog-format", "Format for Envoy access logs.").StringVar(&ctx.AccessLogFormat)
+	serve.Flag("disable-leader-election", "Disable leader election mechanism.").BoolVar(&ctx.DisableLeaderElection)
 
-	serve.Flag("use-extensions-v1beta1-ingress", "Subscribe to the deprecated extensions/v1beta1.Ingress type").BoolVar(&ctx.UseExtensionsV1beta1Ingress)
+	serve.Flag("use-extensions-v1beta1-ingress", "Subscribe to the deprecated extensions/v1beta1.Ingress type.").BoolVar(&ctx.UseExtensionsV1beta1Ingress)
 	return serve, ctx
 }
 
 // doServe runs the contour serve subcommand.
 func doServe(log logrus.FieldLogger, ctx *serveContext) error {
-
 	// step 1. establish k8s client connection
-	client, contourClient, coordinationClient := newClient(ctx.Kubeconfig, ctx.InCluster)
+	clients, err := newKubernetesClients(ctx.Kubeconfig, ctx.InCluster)
+	if err != nil {
+		return fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
 
 	// step 2. create informers
 	// note: 0 means resync timers are disabled
-	coreInformers := coreinformers.NewSharedInformerFactory(client, 0)
-	contourInformers := contourinformers.NewSharedInformerFactory(contourClient, 0)
+	coreInformers := coreinformers.NewSharedInformerFactory(clients.core, 0)
+	contourInformers := contourinformers.NewSharedInformerFactory(clients.contour, 0)
 
 	// Create a set of SharedInformerFactories for each root-ingressroute namespace (if defined)
 	var namespacedInformers []coreinformers.SharedInformerFactory
 	for _, namespace := range ctx.ingressRouteRootNamespaces() {
-		inf := coreinformers.NewSharedInformerFactoryWithOptions(client, 0, coreinformers.WithNamespace(namespace))
+		inf := coreinformers.NewSharedInformerFactoryWithOptions(clients.core, 0, coreinformers.WithNamespace(namespace))
 		namespacedInformers = append(namespacedInformers, inf)
 	}
 
@@ -158,8 +160,8 @@ func doServe(log logrus.FieldLogger, ctx *serveContext) error {
 		},
 		HoldoffDelay:    100 * time.Millisecond,
 		HoldoffMaxDelay: 500 * time.Millisecond,
-		CRDStatus: &k8s.CRDStatus{
-			Client: contourClient,
+		StatusClient: &k8s.StatusWriter{
+			Client: clients.contour,
 		},
 		Builder: dag.Builder{
 			Source: dag.KubernetesCache{
@@ -230,7 +232,7 @@ func doServe(log logrus.FieldLogger, ctx *serveContext) error {
 			Port:        ctx.metricsPort,
 			FieldLogger: log.WithField("context", "metricsvc"),
 		},
-		Client:   client,
+		Client:   clients.core,
 		Registry: registry,
 	}
 	g.Add(metricsvc.Start)
@@ -250,7 +252,7 @@ func doServe(log logrus.FieldLogger, ctx *serveContext) error {
 	if !ctx.DisableLeaderElection {
 		var le *leaderelection.LeaderElector
 		var deposed chan struct{}
-		le, eh.IsLeader, deposed = newLeaderElector(log, ctx, client, coordinationClient)
+		le, eh.IsLeader, deposed = newLeaderElector(log, ctx, clients.core, clients.coordination)
 
 		g.AddContext(func(electionCtx context.Context) {
 			log.WithFields(logrus.Fields{

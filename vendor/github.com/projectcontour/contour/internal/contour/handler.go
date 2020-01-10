@@ -40,7 +40,7 @@ type EventHandler struct {
 
 	HoldoffDelay, HoldoffMaxDelay time.Duration
 
-	CRDStatus *k8s.CRDStatus
+	StatusClient k8s.StatusClient
 
 	*metrics.Metrics
 
@@ -188,6 +188,7 @@ func (e *EventHandler) onUpdate(op interface{}) bool {
 	case opUpdate:
 		if cmp.Equal(op.oldObj, op.newObj,
 			cmpopts.IgnoreFields(ingressroutev1.IngressRoute{}, "Status"),
+			cmpopts.IgnoreFields(projcontour.HTTPProxy{}, "Status"),
 			cmpopts.IgnoreFields(metav1.ObjectMeta{}, "ResourceVersion")) {
 			e.WithField("op", "update").Debugf("%T skipping update, only status has changed", op.newObj)
 			return false
@@ -242,7 +243,7 @@ func (e *EventHandler) setStatus(statuses map[dag.Meta]dag.Status) {
 	for _, st := range statuses {
 		switch obj := st.Object.(type) {
 		case *ingressroutev1.IngressRoute:
-			err := e.CRDStatus.SetStatus(st.Status, st.Description, obj)
+			err := e.StatusClient.SetStatus(st.Status, st.Description, obj)
 			if err != nil {
 				e.WithError(err).
 					WithField("status", st.Status).
@@ -252,7 +253,7 @@ func (e *EventHandler) setStatus(statuses map[dag.Meta]dag.Status) {
 					Error("failed to set status")
 			}
 		case *projcontour.HTTPProxy:
-			err := e.CRDStatus.SetStatus(st.Status, st.Description, obj)
+			err := e.StatusClient.SetStatus(st.Status, st.Description, obj)
 			if err != nil {
 				e.WithError(err).
 					WithField("status", st.Status).
