@@ -16,8 +16,17 @@ limitations under the License.
 
 package resources
 
+// These are the label keys that are applied to HTTP proxy resources to facilitate reconciliation.
 const (
+	// GenerationKey holds the generation of the parent KIngress resource that the HTTPProxy's
+	// spec is derived from.  This is updated along with the spec of child HTTPProxy resources
+	// and then used to cleanup stale HTTPProxy resources owned by the parent.
 	GenerationKey = "contour.networking.knative.dev/generation"
-	ParentKey     = "contour.networking.knative.dev/parent"
+	// ParentKey hold the name of the parent KIngress resource, since OwnerReferences cannot
+	// be used in filter expressions.
+	ParentKey = "contour.networking.knative.dev/parent"
+	// DomainHashKey contains the hash of the fqdn for which this HTTPProxy exists.  We use
+	// the hash in place of the actual fqdn because there is a limit on the length of label
+	// values.
 	DomainHashKey = "contour.networking.knative.dev/domainHash"
 )

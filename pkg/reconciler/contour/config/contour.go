@@ -48,49 +48,52 @@ type visibilityValue struct {
 
 // NewContourFromConfigMap creates an Contour config from the supplied ConfigMap
 func NewContourFromConfigMap(configMap *corev1.ConfigMap) (*Contour, error) {
-	contour := &Contour{
-		VisibilityKeys:    map[v1alpha1.IngressVisibility]sets.String{},
-		VisibilityClasses: map[v1alpha1.IngressVisibility]string{},
-	}
-
 	v, ok := configMap.Data[visibilityConfigKey]
 	if !ok {
 		// These are the defaults.
-		contour.VisibilityKeys = map[v1alpha1.IngressVisibility]sets.String{
-			v1alpha1.IngressVisibilityClusterLocal: sets.NewString("projectcontour/envoy-internal"),
-			v1alpha1.IngressVisibilityExternalIP:   sets.NewString("projectcontour/envoy-external"),
+		return &Contour{
+			VisibilityKeys: map[v1alpha1.IngressVisibility]sets.String{
+				v1alpha1.IngressVisibilityClusterLocal: sets.NewString("projectcontour/envoy-internal"),
+				v1alpha1.IngressVisibilityExternalIP:   sets.NewString("projectcontour/envoy-external"),
+			},
+			VisibilityClasses: map[v1alpha1.IngressVisibility]string{
+				v1alpha1.IngressVisibilityClusterLocal: "contour-internal",
+				v1alpha1.IngressVisibilityExternalIP:   "contour",
+			},
+		}, nil
+	}
+	entry := make(map[v1alpha1.IngressVisibility]visibilityValue)
+	if err := yaml.Unmarshal([]byte(v), entry); err != nil {
+		return nil, err
+	}
+
+	for _, vis := range []v1alpha1.IngressVisibility{
+		v1alpha1.IngressVisibilityClusterLocal,
+		v1alpha1.IngressVisibilityExternalIP,
+	} {
+		if _, ok := entry[vis]; !ok {
+			return nil, fmt.Errorf("visibility must contain %q with class and service", vis)
 		}
-		contour.VisibilityClasses = map[v1alpha1.IngressVisibility]string{
-			v1alpha1.IngressVisibilityClusterLocal: "contour-internal",
-			v1alpha1.IngressVisibilityExternalIP:   "contour",
+	}
+
+	contour := &Contour{
+		VisibilityKeys:    make(map[v1alpha1.IngressVisibility]sets.String, 2),
+		VisibilityClasses: make(map[v1alpha1.IngressVisibility]string, 2),
+	}
+	for key, value := range entry {
+		// Check that the visibility makes sense.
+		switch key {
+		case v1alpha1.IngressVisibilityClusterLocal, v1alpha1.IngressVisibilityExternalIP:
+		default:
+			return nil, fmt.Errorf("unrecognized visibility: %q", key)
 		}
-	} else {
-		entry := make(map[v1alpha1.IngressVisibility]visibilityValue)
-		if err := yaml.Unmarshal([]byte(v), entry); err != nil {
+
+		// See if the Service is a valid namespace/name token.
+		if _, _, err := cache.SplitMetaNamespaceKey(value.Service); err != nil {
 			return nil, err
 		}
-
-		for _, vis := range []v1alpha1.IngressVisibility{v1alpha1.IngressVisibilityClusterLocal, v1alpha1.IngressVisibilityExternalIP} {
-			if _, ok := entry[vis]; !ok {
-				return nil, fmt.Errorf("visibility must contain %q with class and service", vis)
-			}
-		}
-
-		for key, value := range entry {
-			// Check that the visibility makes sense.
-			switch key {
-			case v1alpha1.IngressVisibilityClusterLocal, v1alpha1.IngressVisibilityExternalIP:
-			default:
-				return nil, fmt.Errorf("unrecognized visibility: %q", key)
-			}
-
-			// See if the Service is a valid namespace/name token.
-			if _, _, err := cache.SplitMetaNamespaceKey(value.Service); err != nil {
-				return nil, err
-			}
-			contour.VisibilityKeys[key] = sets.NewString(value.Service)
-			contour.VisibilityClasses[key] = value.Class
-		}
+		contour.VisibilityKeys[key] = sets.NewString(value.Service)
+		contour.VisibilityClasses[key] = value.Class
 	}
 	return contour, nil
 }
