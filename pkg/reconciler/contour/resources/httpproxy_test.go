@@ -101,7 +101,7 @@ func TestMakeProxies(t *testing.T) {
 					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
-					"kubernetes.io/ingress.class": publicClass,
+					"projectcontour.io/ingress.class": publicClass,
 				},
 				OwnerReferences: []metav1.OwnerReference{{
 					APIVersion:         "networking.internal.knative.dev/v1alpha1",
@@ -192,7 +192,7 @@ func TestMakeProxies(t *testing.T) {
 					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
-					"kubernetes.io/ingress.class": privateClass,
+					"projectcontour.io/ingress.class": privateClass,
 				},
 				OwnerReferences: []metav1.OwnerReference{{
 					APIVersion:         "networking.internal.knative.dev/v1alpha1",
@@ -233,7 +233,7 @@ func TestMakeProxies(t *testing.T) {
 					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
-					"kubernetes.io/ingress.class": privateClass,
+					"projectcontour.io/ingress.class": privateClass,
 				},
 				OwnerReferences: []metav1.OwnerReference{{
 					APIVersion:         "networking.internal.knative.dev/v1alpha1",
@@ -274,7 +274,7 @@ func TestMakeProxies(t *testing.T) {
 					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
-					"kubernetes.io/ingress.class": privateClass,
+					"projectcontour.io/ingress.class": privateClass,
 				},
 				OwnerReferences: []metav1.OwnerReference{{
 					APIVersion:         "networking.internal.knative.dev/v1alpha1",
@@ -346,7 +346,7 @@ func TestMakeProxies(t *testing.T) {
 					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
-					"kubernetes.io/ingress.class": privateClass,
+					"projectcontour.io/ingress.class": privateClass,
 				},
 				OwnerReferences: []metav1.OwnerReference{{
 					APIVersion:         "networking.internal.knative.dev/v1alpha1",
@@ -430,7 +430,7 @@ func TestMakeProxies(t *testing.T) {
 					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
-					"kubernetes.io/ingress.class": publicClass,
+					"projectcontour.io/ingress.class": publicClass,
 				},
 				OwnerReferences: []metav1.OwnerReference{{
 					APIVersion:         "networking.internal.knative.dev/v1alpha1",
@@ -538,7 +538,7 @@ func TestMakeProxies(t *testing.T) {
 					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
-					"kubernetes.io/ingress.class": publicClass,
+					"projectcontour.io/ingress.class": publicClass,
 				},
 				OwnerReferences: []metav1.OwnerReference{{
 					APIVersion:         "networking.internal.knative.dev/v1alpha1",
@@ -648,7 +648,7 @@ func TestMakeProxies(t *testing.T) {
 					ParentKey:     "bar",
 				},
 				Annotations: map[string]string{
-					"kubernetes.io/ingress.class": publicClass,
+					"projectcontour.io/ingress.class": publicClass,
 				},
 				OwnerReferences: []metav1.OwnerReference{{
 					APIVersion:         "networking.internal.knative.dev/v1alpha1",
