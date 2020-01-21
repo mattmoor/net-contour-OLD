@@ -23,7 +23,7 @@ required = [
 
 [[override]]
   name = "knative.dev/serving"
-  branch = "master"
+  branch = "release-0.12"
 
 [[override]]
   name = "k8s.io/klog"
